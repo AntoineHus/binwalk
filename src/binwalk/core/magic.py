@@ -30,6 +30,7 @@ class SignatureResult(binwalk.core.module.Result):
         self.invalid = False
         self.once = False
         self.overlap = False
+        self.end = False
 
         # These are set by code internally
         self.id = 0
@@ -130,13 +131,13 @@ class SignatureLine(object):
         # little endian.
         if self.type.startswith('be'):
             self.type = self.type[2:]
-            self.endianess = '>'
+            self.endianness = '>'
         elif self.type.startswith('le'):
-            self.endianess = '<'
+            self.endianness = '<'
             self.type = self.type[2:]
-        # Assume big endian if no endianess was explicitly specified
+        # Assume big endian if no endianness was explicitly specified
         else:
-            self.endianess = '>'
+            self.endianness = '>'
 
         # Check the comparison value for the type of comparison to be performed (e.g.,
         # '=0x1234', '>0x1234', etc). If no operator is specified, '=' is implied.
@@ -236,9 +237,9 @@ class SignatureLine(object):
             self.fmt = self.fmt.upper()
 
         # If a struct format was identified, create a format string to be passed to struct.unpack
-        # which specifies the endianess and data type format.
+        # which specifies the endianness and data type format.
         if self.fmt:
-            self.pkfmt = '%c%c' % (self.endianess, self.fmt)
+            self.pkfmt = '%c%c' % (self.endianness, self.fmt)
         else:
             self.pkfmt = None
 
@@ -278,17 +279,17 @@ class Signature(object):
     Class to hold signature data and generate signature regular expressions.
     '''
 
-    def __init__(self, id, first_line):
+    def __init__(self, sid, first_line):
         '''
         Class constructor.
 
-        @id         - A ID value to uniquely identify this signature.
+        @sid        - A ID value to uniquely identify this signature.
         @first_line - The first SignatureLine of the signature (subsequent
                       SignatureLines should be added via self.append).
 
         Returns None.
         '''
-        self.id = id
+        self.id = sid
         self.lines = [first_line]
         self.title = first_line.format
         self.offset = first_line.offset
@@ -311,7 +312,7 @@ class Signature(object):
 
         # Strings and single byte signatures are taken at face value;
         # multi-byte integer values are turned into regex strings based
-        # on their data type size and endianess.
+        # on their data type size and endianness.
         if line.type == 'regex':
             # Regex types are already compiled expressions.
             # Note that since re.finditer is used, unless the specified
@@ -322,23 +323,23 @@ class Signature(object):
         elif line.size == 1:
             restr = chr(line.value)
         elif line.size == 2:
-            if line.endianess == '<':
+            if line.endianness == '<':
                 restr = chr(line.value & 0xFF) + chr(line.value >> 8)
-            elif line.endianess == '>':
+            elif line.endianness == '>':
                 restr = chr(line.value >> 8) + chr(line.value & 0xFF)
         elif line.size == 4:
-            if line.endianess == '<':
+            if line.endianness == '<':
                 restr = (chr(line.value & 0xFF) +
                          chr((line.value >> 8) & 0xFF) +
                          chr((line.value >> 16) & 0xFF) +
                          chr(line.value >> 24))
-            elif line.endianess == '>':
+            elif line.endianness == '>':
                 restr = (chr(line.value >> 24) +
                          chr((line.value >> 16) & 0xFF) +
                          chr((line.value >> 8) & 0xFF) +
                          chr(line.value & 0xFF))
         elif line.size == 8:
-            if line.endianess == '<':
+            if line.endianness == '<':
                 restr = (chr(line.value & 0xFF) +
                          chr((line.value >> 8) & 0xFF) +
                          chr((line.value >> 16) & 0xFF) +
@@ -347,7 +348,7 @@ class Signature(object):
                          chr((line.value >> 40) & 0xFF) +
                          chr((line.value >> 48) & 0xFF) +
                          chr(line.value >> 56))
-            elif line.endianess == '>':
+            elif line.endianness == '>':
                 restr = (chr(line.value >> 56) +
                          chr((line.value >> 48) & 0xFF) +
                          chr((line.value >> 40) & 0xFF) +
@@ -428,6 +429,9 @@ class Magic(object):
         self.fmtstr = re.compile("%[^%]")
         # Regex rule to find periods (see self._do_math)
         self.period = re.compile("\.")
+
+    def reset(self):
+        self.display_once = set()
 
     def _filtered(self, text):
         '''
@@ -551,7 +555,6 @@ class Magic(object):
         Returns a dictionary of tags parsed from the data.
         '''
         description = []
-        tag_strlen = None
         max_line_level = 0
         previous_line_end = 0
         tags = {'id': signature.id, 'offset':
@@ -671,8 +674,13 @@ class Magic(object):
                     # Up until this point, date fields are treated as integer values,
                     # but we want to display them as nicely formatted strings.
                     if line.type == 'date':
-                        ts = datetime.datetime.utcfromtimestamp(dvalue)
-                        dvalue = ts.strftime("%Y-%m-%d %H:%M:%S")
+                        try:
+                            ts = datetime.datetime.utcfromtimestamp(dvalue)
+                            dvalue = ts.strftime("%Y-%m-%d %H:%M:%S")
+                        except KeyboardInterrupt as e:
+                            raise e
+                        except Exception:
+                            dvalue = "invalid timestamp"
 
                     # Generate the tuple for the format string
                     dvalue_tuple = ()
@@ -793,9 +801,11 @@ class Magic(object):
         if dlen is None:
             dlen = len(data)
 
+        sc = 0
         for signature in self.signatures:
             # Use regex to search the data block for potential signature
             # matches (fast)
+            sc += 1
             for match in signature.regex.finditer(data):
                 # Take the offset of the start of the signature into account
                 offset = match.start() - signature.offset
@@ -819,7 +829,7 @@ class Magic(object):
                                 continue
                             else:
                                 self.display_once.add(signature.title)
-
+                        
                         # Append the result to the results list
                         results.append(SignatureResult(**tags))
 

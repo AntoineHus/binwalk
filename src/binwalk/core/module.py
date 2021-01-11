@@ -16,7 +16,6 @@ import binwalk.core.statuserver
 import binwalk.core.common
 import binwalk.core.settings
 import binwalk.core.plugin
-from threading import Thread
 from binwalk.core.compat import *
 from binwalk.core.exceptions import *
 
@@ -416,7 +415,7 @@ class Module(object):
 
             # Values in self.target_file_list are either already open files (BlockFile instances), or paths
             # to files that need to be opened for scanning.
-            if isinstance(next_target_file, str):
+            if isinstance(next_target_file, str) or isinstance(next_target_file, unicode):
                 fp = self.config.open_file(next_target_file)
             else:
                 fp = next_target_file
@@ -475,7 +474,6 @@ class Module(object):
         # as enabled
         if not self.enabled:
             self.enabled = True
-
         self.validate(r)
         self._plugins_result(r)
 
@@ -881,8 +879,6 @@ class Modules(object):
         '''
         kwargs = {'enabled': False}
         last_priority = {}
-        longs = []
-        shorts = ""
         parser = argparse.ArgumentParser(add_help=False)
         # Hack: This allows the ListActionParser class to correllate short options to long options.
         # There is probably a built-in way to do this in the

@@ -52,7 +52,7 @@ class LZMAPlugin(binwalk.core.plugin.Plugin):
         if result.valid and result.file and result.description.lower().startswith('lzma compressed data'):
 
             # Seek to and read the suspected lzma data
-            fd = self.module.config.open_file(result.file.name, offset=result.offset, length=self.MAX_DATA_SIZE)
+            fd = self.module.config.open_file(result.file.path, offset=result.offset, length=self.MAX_DATA_SIZE)
             data = fd.read(self.MAX_DATA_SIZE)
             fd.close()
 
@@ -62,3 +62,5 @@ class LZMAPlugin(binwalk.core.plugin.Plugin):
                 data = data[:5] + self.FAKE_LZMA_SIZE + data[5:]
                 if not self.is_valid_lzma(data):
                     result.valid = False
+                else:
+                    result.description = ",".join(result.description.split(',')[:-1] + [" missing uncompressed size"])

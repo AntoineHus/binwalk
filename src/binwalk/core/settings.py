@@ -6,7 +6,7 @@ import binwalk.core.common as common
 from binwalk.core.compat import *
 
 
-class Settings:
+class Settings(object):
 
     '''
     Binwalk settings class, used for accessing user and system file paths and general configuration settings.
@@ -128,11 +128,18 @@ class Settings:
         '''
         try:
             # This should work in both Windows and Unix environments
-            return os.getenv('USERPROFILE') or os.getenv('HOME')
+            for envname in ['USERPROFILE', 'HOME']:
+                user_dir = os.getenv(envname)
+                if user_dir is not None:
+                    return user_dir
+            if os.path.expanduser("~") is not None:
+                return os.path.expanduser("~")
         except KeyboardInterrupt as e:
             raise e
         except Exception:
-            return ''
+            pass
+
+        return ''
 
     def _file_path(self, dirname, filename):
         '''

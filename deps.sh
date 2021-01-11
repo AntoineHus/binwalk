@@ -13,9 +13,14 @@ set -o nounset
 if ! which lsb_release > /dev/null
 then
     function lsb_release {
-        if [ -f /etc/lsb-release ]
+        if [ -f /etc/os-release ]
         then
-            cat /etc/lsb-release | grep DISTRIB_ID | cut -d= -f 2
+            [[ "$1" = "-i" ]] && cat /etc/os-release | grep ^"ID" | cut -d= -f 2
+            [[ "$1" = "-r" ]] && cat /etc/os-release | grep "VERSION_ID" | cut -d= -d'"' -f 2
+        elif [ -f /etc/lsb-release ]
+        then
+            [[ "$1" = "-i" ]] && cat /etc/lsb-release | grep "DISTRIB_ID" | cut -d= -f 2
+            [[ "$1" = "-r" ]] && cat /etc/lsb-release | grep "DISTRIB_RELEASE" | cut -d= -f 2
         else
             echo Unknown
         fi
@@ -38,6 +43,9 @@ if [ $distro = "Kali" ]
 then
     APT_CANDIDATES="git build-essential libqt4-opengl mtd-utils gzip bzip2 tar arj lhasa p7zip p7zip-full cabextract util-linux firmware-mod-kit cramfsswap squashfs-tools zlib1g-dev liblzma-dev liblzo2-dev sleuthkit default-jdk lzop cpio"
 elif [ $distro_version = "17" ]
+then
+    APT_CANDIDATES="git build-essential libqt4-opengl mtd-utils gzip bzip2 tar arj lhasa p7zip p7zip-full cabextract cramfsswap squashfs-tools zlib1g-dev liblzma-dev liblzo2-dev sleuthkit default-jdk lzop srecord cpio"
+elif [ $distro_version = "18" ]
 then
     APT_CANDIDATES="git build-essential libqt4-opengl mtd-utils gzip bzip2 tar arj lhasa p7zip p7zip-full cabextract cramfsswap squashfs-tools zlib1g-dev liblzma-dev liblzo2-dev sleuthkit default-jdk lzop srecord cpio"
 else
@@ -77,9 +85,8 @@ function install_sasquatch
 
 function install_jefferson
 {
-    install_pip_package "cstruct==1.0"
     git clone https://github.com/sviehb/jefferson
-    (cd jefferson && $SUDO python2 setup.py install)
+    (cd jefferson && $SUDO pip3 install -r requirements.txt && $SUDO python3 setup.py install)
     $SUDO rm -rf jefferson
 }
 
@@ -87,11 +94,30 @@ function install_unstuff
 {
     mkdir -p /tmp/unstuff
     cd /tmp/unstuff
-    wget -O - http://my.smithmicro.com/downloads/files/stuffit520.611linux-i386.tar.gz | tar -zxv
+
+    wget -O - http://downloads.tuxfamily.org/sdtraces/stuffit520.611linux-i386.tar.gz | tar -zxv
     $SUDO cp bin/unstuff /usr/local/bin/
     cd -
     rm -rf /tmp/unstuff
 }
+
+function install_cramfstools
+{
+  # Downloads cramfs tools from sourceforge and installs them to $INSTALL_LOCATION
+  TIME=`date +%s`
+  INSTALL_LOCATION=/usr/local/bin
+
+  # https://github.com/torvalds/linux/blob/master/fs/cramfs/README#L106
+  git clone https://github.com/npitre/cramfs-tools
+  # There is no "make install"
+  (cd cramfs-tools \
+  && make \
+  && $SUDO install mkcramfs $INSTALL_LOCATION \
+  && $SUDO install cramfsck $INSTALL_LOCATION)
+
+  rm -rf cramfs-tools
+}
+
 
 function install_ubireader
 {
@@ -239,3 +265,7 @@ install_jefferson
 install_unstuff
 install_ubireader
 
+if [ $distro_version = "18" ]
+then
+install_cramfstools
+fi
